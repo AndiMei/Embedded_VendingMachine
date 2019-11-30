@@ -15,6 +15,10 @@
 #define ledBack(state) { HAL_GPIO_WritePin(LED_YELLOW_GPIO_Port, LED_YELLOW_Pin, (state)? GPIO_PIN_RESET:GPIO_PIN_SET); }
 #define buzzer(state) { HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, (state)? GPIO_PIN_SET:GPIO_PIN_RESET); }
 
+#define ledLoading(state)	{ HAL_GPIO_WritePin(LED_YELLOW_GPIO_Port, LED_YELLOW_Pin, (state)? GPIO_PIN_RESET:GPIO_PIN_SET);}
+#define led500(state)		{ HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, (state)? GPIO_PIN_RESET:GPIO_PIN_SET);}
+#define led1000(state)		{ HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, (state)? GPIO_PIN_RESET:GPIO_PIN_SET);}
+
 void myTask_init(void);
 void myTask_Run(void);
 _Bool PB_Process(void);

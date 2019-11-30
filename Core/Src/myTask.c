@@ -2,23 +2,26 @@
  * myTask.c
  *
  *  Created on: Nov 24, 2019
- *      Author: Andi
+ *      Author: Andi Mei Prasetyo
+ *
  */
 
 #include "myTask.h"
 #include "myLCD.h"
 
 /* ------------------------------- */
-enum state{start, startDelay, BuzzerOn, insertCoin, checkCoin, ready, drop, in500, in1000, out500, out1000, cancel}myState;
+enum state{start, startDelay, insertCoin1, insertCoin2, ready, cancel, drop, k500, k1000, }myState;
+enum flag{noCoin, in500, in1000}myFlag;
 volatile uint16_t delay, delay1=0;
 volatile uint16_t debounce1=0xFF;
 volatile uint16_t debounce2=0xFF;
 volatile uint16_t debounce3=0xFF;
 volatile uint16_t debounce4=0xFF;
-volatile uint16_t saldo=0;
+volatile uint16_t money=0;
 volatile uint8_t i=0,j=0;
 _Bool pressed=0;
 _Bool toggle=0;
+_Bool printEn=0;
 
 void myTask_init(void){
 	myLCD_init();
@@ -33,7 +36,7 @@ void myTask_Run(void){
 	switch (myState){
 	case start:{
 		myLCD_setCursor(0, 0); myLCD_print("Vending Machine");
-		myLCD_setCursor(0, 1); myLCD_print("Andi Mei");
+		myLCD_setCursor(0, 1); myLCD_print("   Andi Mei");
 		myState=startDelay;
 	}break;
 
@@ -42,160 +45,316 @@ void myTask_Run(void){
 			delay1=0;
 			myLCD_clear();
 			myLCD_setCursor(0, 0); myLCD_print("Insert Coin !");
-			myState=checkCoin;
+			printEn=1;
+			myState=insertCoin1;
 		}
 
 	}break;
 
-	case checkCoin:{
-		if(PB_u500()){
-			myLCD_clear();
-			myLCD_setCursor(0, 0); myLCD_print("Success !");
-			myLCD_setCursor(0, 1); myLCD_print("500 inserted");
-			myState=in500;
-		}
-		if(PB_u1000()){
-			myLCD_clear();
-			myLCD_setCursor(0, 0); myLCD_print("Success !");
-			myLCD_setCursor(0, 1); myLCD_print("1000 inserted");
-			myState=in1000;
+	case insertCoin1:{
+		/*	Printed once in loop	*/
+		if(printEn){
+			printEn=0;
+			myLCD_setCursor(0, 1); myLCD_print("Money: "); myLCD_printNum(money);
 		}
 
-		if(saldo==500){
-			if(PB_Cancel()){
-				saldo=0;
-				myState=cancel;
+		/*	Check type of coin when sensor detected, and give appropriate flag	*/
+		if(PB_u500()){
+			buzzer(1);
+			myLCD_clear();
+			myLCD_setCursor(0, 0); myLCD_print("Rp.500 inserted !");
+			myFlag=in500;
+		}
+
+		if(PB_u1000()){
+			buzzer(1);
+			myLCD_clear();
+			myLCD_setCursor(0, 0); myLCD_print("Rp.1000 inserted");
+			myFlag=in1000;
+		}
+
+		/*	Check flag and goto next state	*/
+		if(myFlag==in500){
+			if(++delay > 500){
+				delay=0;
+				buzzer(0);
+				money+=500;
+				myLCD_clear();
+				myFlag=noCoin;
+				myLCD_setCursor(0, 0); myLCD_print("Insert Coin !");
+				printEn=1;
+				myState=insertCoin2;
 			}
 		}
 
-		if(saldo==1000){
-			myLCD_clear();
-			myState=ready;
+		if(myFlag==in1000){
+			if(++delay > 500){
+				delay=0;
+				buzzer(0);
+				money+=1000;
+				myLCD_clear();
+				myFlag=noCoin;
+				printEn=1;
+				myState=ready;
+			}
+		}
+	}break;
+
+	case insertCoin2:{
+		/*	Printed once in loop	*/
+		if(printEn){
+			printEn=0;
+			myLCD_setCursor(0, 1); myLCD_print("Money: "); myLCD_printNum(money);
 		}
 
-		if(saldo==1500){
+		/*	Check type of coin when sensor detected, and give appropriate flag	*/
+		if(PB_u500()){
+			buzzer(1);
 			myLCD_clear();
-			myLCD_setCursor(0, 0); myLCD_print("Money Returned !");
-			myLCD_setCursor(0, 1); myLCD_print("Rp.500");
-			saldo-=500;		//Saldo dikurangi 500
-			myState=out500;
+			myLCD_setCursor(0, 0); myLCD_print("Rp.500 inserted");
+			myFlag=in500;
+		}
+
+		if(PB_u1000()){
+			buzzer(1);
+			myLCD_clear();
+			myLCD_setCursor(0, 0); myLCD_print("Rp.1000 inserted");
+			myFlag=in1000;
+		}
+		if(PB_Cancel()){
+			myLCD_clear();
+			printEn=1;
+			myState=cancel;
+		}
+
+		/*	Check flag and goto next state	*/
+		if(myFlag==in500){
+			if(++delay > 500){
+				delay=0;
+				buzzer(0);
+				money+=500;
+				myLCD_clear();
+				printEn=1;
+				myFlag=noCoin;
+				myState=ready;
+			}
+		}
+
+		if(myFlag==in1000){
+			if(++delay > 500){
+				delay=0;
+				buzzer(0);
+				money+=1000;
+				myLCD_clear();
+				myFlag=noCoin;
+				myState=k500;
+			}
 		}
 	}break;
 
 	case ready:{
-		myLCD_setCursor(0, 0); myLCD_print("Process? (Y/N)");
-		ledProcess(1);
+		if(printEn){	//printed once
+			printEn=0;
+			myLCD_setCursor(0, 0); myLCD_print("Process? (Y/N)");
+			myLCD_setCursor(0, 1); myLCD_print("Money: "); myLCD_printNum(money);
+		}
+
 		if(PB_Process()){
+			money-=1000;			//money is taken to pay candy
 			myLCD_clear();
-			myLCD_setCursor(0, 0); myLCD_print("Success !");
-			myLCD_setCursor(0, 1); myLCD_print("Candy Dropped");
-			saldo=0;
+			printEn=1;
 			myState=drop;
 		}
-
 		if(PB_Cancel()){
 			myLCD_clear();
-			myLCD_setCursor(0, 0); myLCD_print("Transaction");
-			myLCD_setCursor(0, 1); myLCD_print("Canceled");
-			saldo=0;
+			printEn=1;
 			myState=cancel;
-
 		}
-	}break;
-
-	case drop:{
-		ledProcess(0);
-		if(++delay1 > 80){
-			delay1=0;
-			toggle=!(toggle);
-			i++;
-			buzzer(toggle);
-			ledDrop(toggle);
-		}
-
-		if(i>5) {
-			i=0;
+		if(PB_u500()){
+			money+=500;
 			myLCD_clear();
-			myState=start;
+			myState=k500;
 		}
-
+		if(PB_u1000()){
+			money+=1000;
+			myLCD_clear();
+			myState=k1000;
+		}
 	}break;
 
 	case cancel:{
-		ledProcess(0);
-		if((++delay > 80) && (i<6)){
+		/* check money in machine	*/
+		if(money==500){
+			/* Printed once in loop	*/
+			if(printEn){
+				printEn=0;
+				myLCD_setCursor(0, 0); myLCD_print("Money Refunded !");
+				myLCD_setCursor(0, 1); myLCD_print("Rp.500");
+			}
+
+			/* Blinky LED and buzzer beep	*/
+			if((++delay > 80) && (i<=9)){
+				delay=0;
+				toggle=!(toggle);
+				buzzer(toggle);
+				ledLoading(toggle);
+				i++;
+			}
+
+			/* goto next state after blinky	*/
+			if(i>=8){
+				led500(1);
+				buzzer(1);
+				if(++delay > 500){
+					i=0;
+					led500(0);
+					buzzer(0);
+					delay=0;
+					myLCD_clear();
+					printEn=1;
+					money-=500;		//500 refunded
+					myState=start;
+				}
+			}
+		}
+
+		/* check money in machine	*/
+		else if(money==1000){
+			/* Printed once in loop	*/
+			if(printEn){
+				printEn=0;
+				myLCD_setCursor(0, 0); myLCD_print("Money Refunded !");
+				myLCD_setCursor(0, 1); myLCD_print("Rp.1000");
+			}
+			/* Blinky LED and buzzer beep	*/
+			if((++delay > 80) && (i<=9)){
+				delay=0;
+				toggle=!(toggle);
+				buzzer(toggle);
+				ledLoading(toggle);
+				i++;
+			}
+
+			/* goto next state after blinky	*/
+			if(i>=8){
+				led1000(1);
+				buzzer(1);
+				if(++delay > 500){
+					i=0;
+					led1000(0);
+					buzzer(0);
+					delay=0;
+					myLCD_clear();
+					printEn=1;
+					money-=1000;	//1000 refunded
+					myState=start;
+				}
+			}
+		}
+
+	}break;
+
+	case drop:{
+		/*	printed once in loop	*/
+		if(printEn){
+			printEn=0;
+			myLCD_setCursor(0, 0); myLCD_print("Success !");
+			myLCD_setCursor(0, 1); myLCD_print("Candy Dropped");
+		}
+
+		/* Blinky LED and buzzer beep	*/
+		if((++delay > 80) && (i<=9)){
 			delay=0;
 			toggle=!(toggle);
 			buzzer(toggle);
-			ledCancel(toggle);
+			ledLoading(toggle);
 			i++;
 		}
 
-		if(++delay1 > 500){
-			i=0;
-			delay1=0;
-			myLCD_clear();
-			myLCD_setCursor(0, 0); myLCD_print("Money Returned !");
-			if(saldo==0){
-				myLCD_setCursor(0, 1); myLCD_print("Rp.500");
+		/* goto next state after blinky	*/
+		if(i>=8){
+			ledDrop(1);
+			buzzer(1);
+			if(++delay > 500){
+				i=0;
+				ledDrop(0);
+				buzzer(0);
+				delay=0;
+				myLCD_clear();
+				printEn=1;
+				myState=ready;
 			}
-			else {
-				myLCD_setCursor(0, 1); myLCD_print("Rp.1000");
+		}
+	}break;
+
+	case k500:{
+		/* Money overflow	*/
+		if(money==1500){
+			money-=500;		//500 refunded
+			myLCD_setCursor(0, 0); myLCD_print("Money Refunded !");
+			myLCD_setCursor(0, 1); myLCD_print("Rp.500");
+		}
+
+		/* Blinky LED and buzzer beep	*/
+		if((++delay > 80) && (i<=9)){
+			delay=0;
+			toggle=!(toggle);
+			buzzer(toggle);
+			ledLoading(toggle);
+			i++;
+		}
+
+		/* goto next state after blinky	*/
+		if(i>=8){
+			led500(1);
+			buzzer(1);
+			if(++delay > 500){
+				i=0;
+				led500(0);
+				buzzer(0);
+				delay=0;
+				myLCD_clear();
+				printEn=1;
+				myState=ready;
 			}
-			myState=out1000;
 		}
 	}break;
 
-	case in500:{
-		buzzer(1);
-		if(++delay1 > 500){
-			delay1=0;
-			buzzer(0);
-			myLCD_clear();
-			saldo+=500;
-			if(saldo<1000){
-				myLCD_setCursor(0, 0); myLCD_print("Insert Coin !");
+	case k1000:{
+		/* Money overflow	*/
+		if(money==2000){
+			money-=1000;		//1000 refunded
+			myLCD_setCursor(0, 0); myLCD_print("Money Refunded !");
+			myLCD_setCursor(0, 1); myLCD_print("Rp.1000");
+		}
+
+		/* Blinky LED and buzzer beep	*/
+		if((++delay > 80) && (i<=9)){
+			delay=0;
+			toggle=!(toggle);
+			buzzer(toggle);
+			ledLoading(toggle);
+			i++;
+		}
+
+		/* goto next state after blinky	*/
+		if(i>=8){
+			led1000(1);
+			buzzer(1);
+			if(++delay > 500){
+				i=0;
+				led1000(0);
+				buzzer(0);
+				delay=0;
+				myLCD_clear();
+				printEn=1;
+				myState=ready;
 			}
-			myLCD_setCursor(0, 1); myLCD_print("Saldo: Rp."); myLCD_printNum(saldo);
-			myState=checkCoin;
 		}
 	}break;
-
-	case in1000:{
-		buzzer(1);
-		if(++delay1 > 500){
-			delay1=0;
-			buzzer(0);
-			myLCD_clear();
-			saldo+=1000;
-			myState=checkCoin;
-		}
-	}break;
-
-	case out500:{
-		ledBack(1);
-		if(++delay1 > 1000){
-			delay1=0;
-			ledBack(0);
-			myLCD_clear();
-			myState=checkCoin;
-		}
-	}break;
-
-	case out1000:{
-		saldo=0;
-		ledBack(1);
-		if(++delay1 > 1000){
-			delay1=0;
-			ledBack(0);
-			myLCD_clear();
-			myState=start;
-		}
-	}break;
-
 	}
-
 }
+
 
 /* ---------------------------------------------------------------------------------------- */
 _Bool PB_Process(void){
